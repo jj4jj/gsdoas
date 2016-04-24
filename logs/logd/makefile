@@ -1,2 +1,2 @@
-logd: logd.cpp
-	g++ --std=c++11 $^ ../../dcpots/lib/libdcbase.a -o $@ -g
+logd: logd.cpp logd.pb.cc ../share/logs.pb.cc
+	g++ --std=c++11 $^ -I../../../ -L../../../dcpots/lib/ -ldcbase -lprotobuf  -o $@ 

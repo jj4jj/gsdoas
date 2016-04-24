@@ -1,7 +1,7 @@
-#include "../../dcpots/base/dcsmq.h"
-#include "../../dcpots/base/logger.h"
-#include "../../dcpots/base/cmdline_opt.h"
-#include "../../dcpots/base/dcutils.hpp"
+#include "dcpots/base/dcsmq.h"
+#include "dcpots/base/logger.h"
+#include "dcpots/base/cmdline_opt.h"
+#include "dcpots/base/dcutils.hpp"
 
 #define LOGD_VERSION    "0.0.1"
 #define MAX_WORKER_NUM  16
@@ -11,11 +11,11 @@ static struct  {
     string    prev_write_file_name;
     string    write_datetime;
     string    write_file_name;
-    int       dump_fd{ -1 };
-    int       worker_idx;
+	int       worker_idx{ 0 };
     string    data_file_pattern;
     cmdline_opt_t *   cmdl{ nullptr };
-    FILE *    dump_fp{ nullptr };
+	FILE *    dump_fp{ nullptr };
+	bool	  stop{ false };
 } dump_file_env;
 
 static int dump_fp(dcsmq_t *, uint64_t src, const dcsmq_msg_t & msg, void * ud) {
@@ -74,13 +74,14 @@ static void dump_worker(){
         return;
     }
     dcsmq_msg_cb(dcsmq, dump_fp, nullptr);
-    while (true){
+	while (!dump_file_env.stop){
         dcsmq_poll(dcsmq, 1000 * 10);//10ms
         usleep(1000);
     }
 
-    if (dump_file_env.dump_fd >= 0){
-        dcsutil::closefd(dump_file_env.dump_fd);
+    if (dump_file_env.dump_fp){
+		fclose(dump_file_env.dump_fp);
+		dump_file_env.dump_fp = nullptr;
     }
 }
 
@@ -94,35 +95,62 @@ int main(int argc, char *argv[]){
                "log-file-size:r::set single log file size:1024*1024*10;"
                "log-roll:r::set log max roll num:20;"
                "data-dir:r::set dump data dir:/tmp;"
-               "data-file:r::set dump data file pattern:bulog.{worker}.{datetime};"
+               "data-file:r::set dump data file pattern:bulog.{worker}.{datetime}.txt;"
                "worker:r::set worker thread num:1;"
                "msgq-key:r::communication with reporter msgq key path:/tmp;"
-               "daemon:n:D:daemon mode running;"
+			   "pidfile-dir:r::the running state file path dir:/tmp/{prog}.pid;"
+			   "stop:n::stop the process;"
+			   "daemon:n:D:daemon mode running;"
                );
     if (cmdl.hasopt("version")){
         std::cout << LOGD_VERSION << std::endl;
         return 0;
     }
+	string pidfile = cmdl.getoptstr("pidfile-dir");
+	dcsutil::strreplace(pidfile, "{prog}", dcsutil::path_base(argv[0]));
+	if (cmdl.hasopt("stop")){
+		return dcsutil::lockpidfile(pidfile, SIGTERM, true);
+	}
     if (cmdl.hasopt("daemon")){
-        dcsutil::daemonlize();
-    }
+	    dcsutil::daemonlize();
+	}
+	int pidrunning = dcsutil::lockpidfile(pidfile);
+	if (getpid() != pidrunning){
+		GLOG_ERR("another process [%d] is running ...", pidrunning);
+		return -1;
+	}
+	//	typedef void(*sah_handler)(int sig, siginfo_t * sig_info, void * ucontex);
+	auto sah = [](int sig, siginfo_t * sig_info, void * ucontex){
+		GLOG_DBG("get a signal :%d", sig);
+		if (SIGTERM == sig){
+			dump_file_env.stop = true;
+		}
+	};
+	dcsutil::signalh_push(SIGINT, sah);
+	dcsutil::signalh_push(SIGHUP, sah);
+	dcsutil::signalh_push(SIGTERM, sah);
+
     int     children[MAX_WORKER_NUM];
+	int		worker_num = cmdl.getoptint("worker");
     dump_file_env.cmdl = &cmdl;
-    for (int i = 0; i < cmdl.getoptint("worker"); ++i){
+	for (int i = 0; i < worker_num; ++i){
         children[i] = fork();
         if (children[i] == 0){ //child thread            
             dump_file_env.worker_idx = i+1;
             dump_worker();
+			GLOG_IFO("children i:%d -> pid:%d exit", i, getpid());
             return 0;
         }
         else {
             GLOG_IFO("create children i:%d -> pid:%d", i, children[i]);
         }
     }
-    //waiting all children 
-    while (true){
-        //poll command
-        wait();
-    }
+	while (!dump_file_env.stop){
+		sleep(1);
+	}
+	for (int i = 0; i < worker_num; ++i){
+		GLOG_IFO("stop process [%d] success ...", children[i]);
+		kill(children[i], SIGTERM); //notify children close
+	}
     return 0;
 }

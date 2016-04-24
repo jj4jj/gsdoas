@@ -1,0 +1,34 @@
+package example;
+
+enum EventType {
+    EVT_LOGIN=1;
+    EVT_LOGOUT=2;
+    EVT_CHARGE=3;
+    EVT_BAG_CHANGE=4;
+    EVT_JOIN_ARMY=5;
+    EVT_QUIT_ARMY=6;
+    EVT_REPORT_ONELINE=7;
+    EVT_DUMP_RANK=8;
+}
+
+message PlayerBrief {
+    required string name=1;
+    required uint64 roleid=2;
+}
+
+message BagChange {
+    message Change {
+        required int32 type = 1;
+        optional int32 id = 2;
+        optional int32 change = 3;
+        optional int32 orgv = 4;
+        optional int32 newv = 5;
+    }
+    enum ChangeReason {
+        CR_CHARGE=1;
+        CR_SELL=2;
+    }
+    repeated Change change_list = 1;
+    required ChangeReason reason = 2;
+    optional string tag = 3;
+}

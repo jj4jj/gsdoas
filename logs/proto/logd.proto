@@ -1,0 +1,6 @@
+package logd;
+
+message Config {
+    required    string     data_dir=1;
+    required    string     data_file=2;
+}
