@@ -2,10 +2,10 @@
 all: logc logd ex
 
 logc:
-	cd logs/logc && make && mv *.a ../../lib/ && make clean && cp logc.h ../../include/
+	cd logs/logc && make && make install
 
 logd:
-	cd logs/logd && make && mv logd ../../bin/ && make clean
+	cd logs/logd && make && make install
 
 ex:
-	cd logs/logc/examples/ && make && mv write_log ../../../bin && make clean
+	cd logs/logc/examples/ && make && make install
