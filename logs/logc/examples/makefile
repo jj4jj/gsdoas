@@ -3,3 +3,7 @@ write_log: ./write_log.cpp ../logc.cpp ../../share/logs.pb.cc ./bulog.pb.cc
 
 ./bulog.pb.cc: ./bulog.proto
 	protoc bulog.proto --cpp_out=./
+
+
+clean:
+	rm *.o -f
