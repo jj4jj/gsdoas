@@ -55,7 +55,7 @@ int logc_close(){
     }
     return 0;
 }
-static inline void 
+static inline void
 construct_event(::logs::Event & evt, int type, const event_actor_t & actor, int flg, const char * tag){
 	evt.set_id(event_sn::next());
 	evt.set_time(dcsutil::time_unixtime_ms());
@@ -75,7 +75,7 @@ int logc_event(int type, const event_actor_t & actor, long long data, int flg , 
 	string json;
 	dcsutil::protobuf_msg_to_json_string(evt, json);
 	dcsmq_msg_t dcmsg((char*)json.data(), json.length());
-	GLOG_IFO("%s", json.data());
+	GLOG_DBG("%s", json.data());
 	return dcsmq_send(ENV.msgq, ENV.smq_session_id, dcmsg);
 }
 int logc_event(int type, const event_actor_t & actor, const string & data, int flg, const char * tag){
@@ -85,7 +85,7 @@ int logc_event(int type, const event_actor_t & actor, const string & data, int f
 	string json;
 	dcsutil::protobuf_msg_to_json_string(evt, json);
 	dcsmq_msg_t dcmsg((char*)json.data(), json.length());
-	GLOG_IFO("%s", json.data());
+	GLOG_DBG("%s", json.data());
 	return dcsmq_send(ENV.msgq, ENV.smq_session_id, dcmsg);
 }
 int logc_event(int type, const event_actor_t & actor, const ::google::protobuf::Message & data, int flg, const char * tag){
