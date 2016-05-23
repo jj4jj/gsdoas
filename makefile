@@ -1,4 +1,4 @@
-all: proto logc logd ex
+all: proto logc logd 
 
 proto:
 	cd logs/proto && make
@@ -8,5 +8,3 @@ logc:
 logd:
 	cd logs/logd && make && make install
 
-ex:
-	cd logs/logc/examples/ && make && make install

@@ -86,7 +86,7 @@ static void dump_worker(){
 }
 
 
-int main(int argc, char *argv[]){
+int main(int argc, const char *argv[]){
     cmdline_opt_t cmdl(argc, argv);
     cmdl.parse("version:n:v:show version;"
                "log-dir:r::set log dir:/tmp;"
@@ -98,27 +98,27 @@ int main(int argc, char *argv[]){
                "data-file:r::set dump data file pattern:bulog.{worker}.{datetime}.txt;"
                "worker:r::set worker thread num:1;"
                "msgq-key:r::communication with reporter msgq key path:/tmp;"
-			   "pidfile-dir:r::the running state file path dir:/tmp/{prog}.pid;"
+			   "pidfile:r::the running state file path dir:/tmp/{prog}.pid;"
 			   "stop:n::stop the process;"
-			   "daemon:n:D:daemon mode running;"
+			   "daemon:n:D:daemon mode running;", LOGD_VERSION
                );
-    if (cmdl.hasopt("version")){
-        std::cout << LOGD_VERSION << std::endl;
-        return 0;
-    }
-	string pidfile = cmdl.getoptstr("pidfile-dir");
+	string pidfile = cmdl.getoptstr("pidfile");
 	dcsutil::strreplace(pidfile, "{prog}", dcsutil::path_base(argv[0]));
 	if (cmdl.hasopt("stop")){
-		return dcsutil::lockpidfile(pidfile, SIGTERM, true);
+        GLOG_IFO("kill logd ...");
+		return dcsutil::lockpidfile(pidfile, SIGTERM);
 	}
+
     if (cmdl.hasopt("daemon")){
-	    dcsutil::daemonlize();
+	    dcsutil::daemonlize(1, 0, pidfile.c_str());
 	}
-	int pidrunning = dcsutil::lockpidfile(pidfile);
-	if (getpid() != pidrunning){
-		GLOG_ERR("another process [%d] is running ...", pidrunning);
-		return -1;
-	}
+    else {
+        int pidrunning = dcsutil::lockpidfile(pidfile);
+        if (getpid() != pidrunning){
+            GLOG_ERR("another process [%d] is running ...", pidrunning);
+            return -1;
+        }
+    }
 	//	typedef void(*sah_handler)(int sig, siginfo_t * sig_info, void * ucontex);
 	auto sah = [](int sig, siginfo_t * sig_info, void * ucontex){
 		GLOG_DBG("get a signal :%d", sig);
@@ -126,7 +126,6 @@ int main(int argc, char *argv[]){
 			dump_file_env.stop = true;
 		}
 	};
-	dcsutil::signalh_push(SIGINT, sah);
 	dcsutil::signalh_push(SIGHUP, sah);
 	dcsutil::signalh_push(SIGTERM, sah);
 
@@ -135,7 +134,7 @@ int main(int argc, char *argv[]){
     dump_file_env.cmdl = &cmdl;
 	for (int i = 0; i < worker_num; ++i){
         children[i] = fork();
-        if (children[i] == 0){ //child thread            
+        if (children[i] == 0){ //child thread
             dump_file_env.worker_idx = i+1;
             dump_worker();
 			GLOG_IFO("children i:%d -> pid:%d exit", i, getpid());

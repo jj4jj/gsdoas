@@ -1,5 +1,12 @@
 #!/bin/bash
-proto_path=$1
-#set -x
-[ "x$proto_path" = "x" ] && make protoc=protoc protoi="/usr/local/include" protol="-lprotobuf" && exit $?
-make protoc=${proto_path}/bin/protoc protoi=${proto_path}/include protol=${proto_path}/lib/libprotobuf.a
+
+protoc=protoc
+protol="-lprotobuf"
+evl="-lev"
+if [ "x$1" = "xu1" ];then
+    protoc="../../../protobuf/bin/protoc"
+    protol="../../../protobuf/lib/libprotobuf.a"
+    protoi="-I../../../protobuf/include"
+    evl="../../../libev/lib/libev.a"
+fi
+make protoc="${protoc}" protoi="${protoi}" protol="${protol}"
