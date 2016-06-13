@@ -88,11 +88,10 @@ static void dump_worker(){
 
 int main(int argc, const char *argv[]){
     cmdline_opt_t cmdl(argc, argv);
-    cmdl.parse("version:n:v:show version;"
-               "log-dir:r::set log dir:/tmp;"
+    cmdl.parse("log-dir:r::set log dir:/tmp;"
                "log-file:r::set log file pattern:/tmp/gslogd.{worker}.log;"
                "log-level:r::set log level[TRACE|DEBUG|INFO|WARN|ERROR]:INFO;"
-               "log-file-size:r::set single log file size:1024*1024*10;"
+               "log-file-size:r::set single log file size:10240000;"
                "log-roll:r::set log max roll num:20;"
                "data-dir:r::set dump data dir:/tmp;"
                "data-file:r::set dump data file pattern:bulog.{worker}.{datetime}.txt;"

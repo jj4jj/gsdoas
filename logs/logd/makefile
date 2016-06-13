@@ -1,5 +1,5 @@
 logd: logd.cpp logd.pb.cc ../share/logs.pb.cc ../../../dcpots/lib/libdcbase.a
-	g++ --std=c++11 $^ -I../../../ ${protol} ${protoi} -o $@
+	g++ --std=c++11 $^ -I../../../ ${protol} ${protoi} -o $@ -ldl
 logd.pb.cc:
 	${protoc} 
 
