@@ -99,6 +99,7 @@ int main(int argc, const char *argv[]){
                "msgq-key:r::communication with reporter msgq key path:/tmp;"
 			   "pidfile:r::the running state file path dir:/tmp/{prog}.pid;"
 			   "stop:n::stop the process;"
+			   "name:r::set the process name:logd;"
 			   "daemon:n:D:daemon mode running;", LOGD_VERSION
                );
 	string pidfile = cmdl.getoptstr("pidfile");
@@ -124,6 +125,7 @@ int main(int argc, const char *argv[]){
 		if (SIGTERM == sig){
 			dump_file_env.stop = true;
 		}
+        dcsutil::signalh_default(sig);
 	};
 	dcsutil::signalh_push(SIGHUP, sah);
 	dcsutil::signalh_push(SIGTERM, sah);
