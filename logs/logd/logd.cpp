@@ -121,13 +121,13 @@ int main(int argc, const char *argv[]){
     }
 	//	typedef void(*sah_handler)(int sig, siginfo_t * sig_info, void * ucontex);
 	auto sah = [](int sig, siginfo_t * sig_info, void * ucontex){
-		GLOG_DBG("get a signal :%d", sig);
+		GLOG_IFO("got a signal :%d", sig);
 		if (SIGTERM == sig){
 			dump_file_env.stop = true;
 		}
-        dcsutil::signalh_default(sig);
+        dcsutil::signalh_ignore(sig);
 	};
-	dcsutil::signalh_push(SIGHUP, sah);
+	dcsutil::signalh_ignore(SIGHUP);
 	dcsutil::signalh_push(SIGTERM, sah);
 
     int     children[MAX_WORKER_NUM];
@@ -149,8 +149,8 @@ int main(int argc, const char *argv[]){
 		sleep(1);
 	}
 	for (int i = 0; i < worker_num; ++i){
-		GLOG_IFO("stop process [%d] success ...", children[i]);
 		kill(children[i], SIGTERM); //notify children close
-	}
+        GLOG_IFO("stop process [%d] success ...", children[i]);
+    }
     return 0;
 }
