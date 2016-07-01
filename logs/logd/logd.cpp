@@ -2,6 +2,8 @@
 #include "dcpots/base/logger.h"
 #include "dcpots/base/cmdline_opt.h"
 #include "dcpots/base/dcutils.hpp"
+#include "dcpots/base/dclogfile.h"
+#include "../share/logs.pb.h"
 
 #define LOGD_VERSION    "0.0.1"
 #define MAX_WORKER_NUM  16
@@ -14,12 +16,34 @@ static struct  {
 	int       worker_idx{ 0 };
     string    data_file_pattern;
     cmdline_opt_t *   cmdl{ nullptr };
-	FILE *    dump_fp{ nullptr };
+    FILE *    dump_fp{ nullptr };
+    dcsutil::logfile_t  rt_logfile;
 	bool	  stop{ false };
 } dump_file_env;
 
-static int dump_fp(dcsmq_t *, uint64_t src, const dcsmq_msg_t & msg, void * ud) {
+static int record_log_event(dcsmq_t *, uint64_t src, const dcsmq_msg_t & msg, void * ud) {
     time_t now = dcsutil::time_unixtime_s();
+    ::logs::EventMsg log_event_msg;
+    if (!log_event_msg.ParseFromArray(msg.buffer, msg.sz)) {
+        GLOG_ERR("parse from array error ! log msg:%d", msg.sz);
+        return -1;
+    }
+    static std::string json_msg ;
+    json_msg = "{\"time:\"";
+    json_msg.append(dcsutil::strftime(dump_file_env.write_datetime, now));
+    json_msg.append("\",\"flag\":\"LOG_DUMP");
+    if (log_event_msg.flg()&::logs::EventMsg_EventFlagMask_LOG_EVT_FLAG_DIFF) {
+        json_msg.append("|LOG_EVT_FLAG_DIFF");
+    }
+    if (log_event_msg.flg()&::logs::EventMsg_EventFlagMask_LOG_EVT_FLAG_DUMP) {
+        json_msg.append("|LOG_EVT_FLAG_DUMP");
+    }
+    if (log_event_msg.flg()&::logs::EventMsg_EventFlagMask_LOG_EVT_FLAG_RT) {
+        json_msg.append("|LOG_EVT_FLAG_RT");
+    }
+    json_msg.append("\",\"event\":");
+    json_msg.append(log_event_msg.msg());
+    json_msg.append("}");
     if (!dcsutil::time_same_hour(dump_file_env.last_dump_time, now) ||
         dump_file_env.dump_fp == nullptr){
         dump_file_env.write_file_name = dump_file_env.data_file_pattern;
@@ -37,12 +61,13 @@ static int dump_fp(dcsmq_t *, uint64_t src, const dcsmq_msg_t & msg, void * ud) 
         }
     }
     if (dump_file_env.dump_fp){
-        fputs("{\"time\":\"", dump_file_env.dump_fp);
-        fputs(dcsutil::strftime(dump_file_env.write_datetime, now), dump_file_env.dump_fp);
-        fputs("\",\"event\":", dump_file_env.dump_fp);
-        fwrite(msg.buffer, msg.sz, 1, dump_file_env.dump_fp);
-        fputs("}\n", dump_file_env.dump_fp);
+        fputs(json_msg.data(), dump_file_env.dump_fp);
+        fputs("\n", dump_file_env.dump_fp);
         fflush(dump_file_env.dump_fp);
+    }
+    if (log_event_msg.flg()&::logs::EventMsg_EventFlagMask_LOG_EVT_FLAG_RT) {
+        json_msg.append("\n");
+        dump_file_env.rt_logfile.write(json_msg.data(), 10, 1024*1024*100);
     }
     return 0;
 }
@@ -61,6 +86,12 @@ static void dump_worker(){
     dump_file_env.data_file_pattern += "/";
     dump_file_env.data_file_pattern += dump_file_env.cmdl->getoptstr("data-file");
 
+
+    std::string rtlog_file_name = dump_file_env.data_file_pattern;
+    dcsutil::strreplace(rtlog_file_name, "{worker}", std::to_string(dump_file_env.worker_idx));
+    dcsutil::strreplace(rtlog_file_name, "{datetime}", "realtime.log");
+    dump_file_env.rt_logfile.init(rtlog_file_name.c_str());
+
     dcsmq_config_t dcsmq_conf;
     dcsmq_conf.attach = false;
     dcsmq_conf.keypath = dump_file_env.cmdl->getoptstr("msgq-key");
@@ -73,7 +104,7 @@ static void dump_worker(){
         GLOG_ERR("create msgq error !");
         return;
     }
-    dcsmq_msg_cb(dcsmq, dump_fp, nullptr);
+    dcsmq_msg_cb(dcsmq, record_log_event, nullptr);
 	while (!dump_file_env.stop){
         dcsmq_poll(dcsmq, 1000 * 10);//10ms
         usleep(1000);

@@ -5,6 +5,7 @@ message Event {
         optional    int32   type=1;
         optional    uint64  id=2;
         optional    string  tag=3;
+		optional	string	base=4;
     }
     required   uint64   id=1;
     required   uint64   time=2;
@@ -14,5 +15,19 @@ message Event {
     optional   string   src=6;
     optional   string   tag=7;
     optional   uint32   flag=8;
+}
+
+message EventMsg {
+	enum MsgCMD {
+		CMD_LOG_DUMP = 0;
+	}
+	enum EventFlagMask {
+		LOG_EVT_FLAG_DIFF=1; //insert data record
+		LOG_EVT_FLAG_DUMP=2; //dump(update) the data to to a table
+		LOG_EVT_FLAG_RT = 4; //need as real time data stream 
+	}
+	optional MsgCMD		cmd=1;
+	optional string		msg=2;
+	optional uint32		flg=3;			
 }
 

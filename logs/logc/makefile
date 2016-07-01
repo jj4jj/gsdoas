@@ -14,5 +14,5 @@ write_log: examples/write_log.cpp ../share/logs.pb.cc examples/bulog.pb.cc liblo
         g++ --std=c++11 $^ -L../../lib -L../../../dcpots/lib/ -ldcbase -l'dcutil-drs' -lpbjson -o $@ -I../../../ -I${protoi} ${protol}
 
 examples/bulog.pb.cc: examples/bulog.proto
-	${protoc} bulog.proto --cpp_out=examples --proto_path=examples
+	${protoc} examples/bulog.proto --cpp_out=examples --proto_path=examples
 	mv examples/write_log ../../bin/
