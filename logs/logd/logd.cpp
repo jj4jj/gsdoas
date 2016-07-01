@@ -31,15 +31,15 @@ static int record_log_event(dcsmq_t *, uint64_t src, const dcsmq_msg_t & msg, vo
     static std::string json_msg ;
     json_msg = "{\"time:\"";
     json_msg.append(dcsutil::strftime(dump_file_env.write_datetime, now));
-    json_msg.append("\",\"flag\":\"LOG_DUMP");
+    json_msg.append("\",\"flag\":\"LOG_EVT_FLAG");
     if (log_event_msg.flg()&::logs::EventMsg_EventFlagMask_LOG_EVT_FLAG_DIFF) {
-        json_msg.append("|LOG_EVT_FLAG_DIFF");
+        json_msg.append("|DIFF");
     }
     if (log_event_msg.flg()&::logs::EventMsg_EventFlagMask_LOG_EVT_FLAG_DUMP) {
-        json_msg.append("|LOG_EVT_FLAG_DUMP");
+        json_msg.append("|DUMP");
     }
     if (log_event_msg.flg()&::logs::EventMsg_EventFlagMask_LOG_EVT_FLAG_RT) {
-        json_msg.append("|LOG_EVT_FLAG_RT");
+        json_msg.append("|RT");
     }
     json_msg.append("\",\"event\":");
     json_msg.append(log_event_msg.msg());
@@ -89,9 +89,12 @@ static void dump_worker(){
 
     std::string rtlog_file_name = dump_file_env.data_file_pattern;
     dcsutil::strreplace(rtlog_file_name, "{worker}", std::to_string(dump_file_env.worker_idx));
-    dcsutil::strreplace(rtlog_file_name, "{datetime}", "realtime.log");
+    dcsutil::strreplace(rtlog_file_name, "{datetime}", "realtime");
     dump_file_env.rt_logfile.init(rtlog_file_name.c_str());
-
+    if (dump_file_env.rt_logfile.open()) {
+        GLOG_SER("open real time log file:%s error !", rtlog_file_name.c_str());
+        return ;
+    }
     dcsmq_config_t dcsmq_conf;
     dcsmq_conf.attach = false;
     dcsmq_conf.keypath = dump_file_env.cmdl->getoptstr("msgq-key");
@@ -120,12 +123,12 @@ static void dump_worker(){
 int main(int argc, const char *argv[]){
     cmdline_opt_t cmdl(argc, argv);
     cmdl.parse("log-dir:r::set log dir:/tmp;"
-               "log-file:r::set log file pattern:/tmp/gslogd.{worker}.log;"
+               "log-file:r::set log file pattern {worker}:/tmp/gslogd.log;"
                "log-level:r::set log level[TRACE|DEBUG|INFO|WARN|ERROR]:INFO;"
                "log-file-size:r::set single log file size:10240000;"
                "log-roll:r::set log max roll num:20;"
                "data-dir:r::set dump data dir:/tmp;"
-               "data-file:r::set dump data file pattern:bulog.{worker}.{datetime}.txt;"
+               "data-file:r::set dump data file pattern {worker}/{datetime}:bulog.{datetime}.log;"
                "worker:r::set worker thread num:1;"
                "msgq-key:r::communication with reporter msgq key path:/tmp;"
 			   "pidfile:r::the running state file path dir:/tmp/{prog}.pid;"
@@ -136,10 +139,8 @@ int main(int argc, const char *argv[]){
 	string pidfile = cmdl.getoptstr("pidfile");
 	dcsutil::strreplace(pidfile, "{prog}", dcsutil::path_base(argv[0]));
 	if (cmdl.hasopt("stop")){
-        GLOG_IFO("kill logd ...");
 		return dcsutil::lockpidfile(pidfile, SIGTERM);
 	}
-
     if (cmdl.hasopt("daemon")){
 	    dcsutil::daemonlize(1, 0, pidfile.c_str());
 	}
@@ -164,24 +165,35 @@ int main(int argc, const char *argv[]){
     int     children[MAX_WORKER_NUM];
 	int		worker_num = cmdl.getoptint("worker");
     dump_file_env.cmdl = &cmdl;
-	for (int i = 0; i < worker_num; ++i){
-        children[i] = fork();
-        if (children[i] == 0){ //child thread
-            dump_file_env.worker_idx = i+1;
-            dump_worker();
-			GLOG_IFO("children i:%d -> pid:%d exit", i, getpid());
-            return 0;
+    if (worker_num > 1) {
+        if (!strstr(cmdl.getoptstr("data-file"), "{worker}") ||
+            !strstr(cmdl.getoptstr("log-file"), "{worker}")) {
+            GLOG_ERR("error log/data file param for not found {worker} !");
+            return -1;
         }
-        else {
-            GLOG_IFO("create children i:%d -> pid:%d", i, children[i]);
+        for (int i = 0; i < worker_num; ++i) {
+            children[i] = fork();
+            if (children[i] == 0) { //child thread
+                dump_file_env.worker_idx = i + 1;
+                dump_worker();
+                GLOG_IFO("children i:%d -> pid:%d exit", i, getpid());
+                return 0;
+            }
+            else {
+                GLOG_IFO("create children i:%d -> pid:%d", i, children[i]);
+            }
+        }
+        while (!dump_file_env.stop) {
+            sleep(1);
+        }
+        for (int i = 0; i < worker_num; ++i) {
+            kill(children[i], SIGTERM); //notify children close
+            GLOG_IFO("stop process [%d] success ...", children[i]);
         }
     }
-	while (!dump_file_env.stop){
-		sleep(1);
-	}
-	for (int i = 0; i < worker_num; ++i){
-		kill(children[i], SIGTERM); //notify children close
-        GLOG_IFO("stop process [%d] success ...", children[i]);
+    else {
+        dump_file_env.worker_idx = 0;
+        dump_worker();
     }
     return 0;
 }

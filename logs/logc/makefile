@@ -1,5 +1,5 @@
 liblogc.a: logc.cpp ../share/logs.pb.cc
-	g++ --std=c++11 $^ -c -I../../../ ${protoi}
+	g++ --std=c++11 $^ -c -I../../../ ${protoi} -g -O2
 	ar -rcs liblogc.a *.o
 install: example liblogc.a
 	mv liblogc.a ../../lib/

@@ -79,13 +79,13 @@ int logc_event(int type, const event_actor_t & actor, long long data, int flg , 
     if (actor.base) {
         std::string actor_base_json;
         dcsutil::protobuf_msg_to_json_string(*actor.base, actor_base_json);
-        json.replace(json.find(TEMP_STRING_REPLACE)-1, TEMP_STRING_REPLACE_LEN+1, actor_base_json);
+        json.replace(json.find(TEMP_STRING_REPLACE)-1, TEMP_STRING_REPLACE_LEN+2, actor_base_json);
     }
     else {
-        json.erase(json.find(TEMP_STRING_REPLACE)-1, TEMP_STRING_REPLACE_LEN+1);
+        json.erase(json.find(TEMP_STRING_REPLACE), TEMP_STRING_REPLACE_LEN);
     }
     //data
-    json.replace(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 1, std::to_string(data));
+    json.replace(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 2, std::to_string(data));
     ::logs::EventMsg evmsg;
     evmsg.set_cmd(::logs::EventMsg_MsgCMD_CMD_LOG_DUMP);
     evmsg.set_flg(flg);
@@ -111,10 +111,10 @@ int logc_event(int type, const event_actor_t & actor, const char * data, int flg
     if (actor.base) {
         std::string actor_base_json;
         dcsutil::protobuf_msg_to_json_string(*actor.base, actor_base_json);
-        json.replace(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 1, actor_base_json);
+        json.replace(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 2, actor_base_json);
     }
     else {
-        json.erase(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 1);
+        json.erase(json.find(TEMP_STRING_REPLACE), TEMP_STRING_REPLACE_LEN );
     }
     ::logs::EventMsg evmsg;
     evmsg.set_cmd(::logs::EventMsg_MsgCMD_CMD_LOG_DUMP);
@@ -142,15 +142,15 @@ int logc_event(int type, const event_actor_t & actor, const ::google::protobuf::
     //first
     if (actor.base) {
         dcsutil::protobuf_msg_to_json_string(*actor.base, temp_json_str);
-        json.replace(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 1, temp_json_str);
+        json.replace(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 2, temp_json_str);
     }
     else {
-        json.erase(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 1);
+        json.erase(json.find(TEMP_STRING_REPLACE), TEMP_STRING_REPLACE_LEN);
     }
     //second
     temp_json_str = "";
     dcsutil::protobuf_msg_to_json_string(data, temp_json_str);
-    json.replace(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 1, temp_json_str);
+    json.replace(json.find(TEMP_STRING_REPLACE) - 1, TEMP_STRING_REPLACE_LEN + 2, temp_json_str);
 
     ::logs::EventMsg evmsg;
     evmsg.set_cmd(::logs::EventMsg_MsgCMD_CMD_LOG_DUMP);
