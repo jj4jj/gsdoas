@@ -35,6 +35,8 @@ import com.mongodb.MongoException;
 import com.mongodb.WriteConcern;
 import com.mongodb.util.JSON;
 
+import static org.riderzen.flume.sink.MongoSink.CollectionModel.BULOG;
+
 /**
  * User: guoqiang.li
  * Date: 12-9-12
@@ -84,7 +86,7 @@ public class MongoSink extends AbstractSink implements Configurable {
 	private static final Boolean DEFAULT_AUTO_WRAP = false;
 	public static final String DEFAULT_WRAP_FIELD = "log";
 	public static final String DEFAULT_TIMESTAMP_FIELD = null;
-	public static final char NAMESPACE_SEPARATOR = '.';
+	public static final String NAMESPACE_SEPARATOR = ".";
 	public static final String OP_UPSERT = "upsert";
 	public static final String EXTRA_FIELDS_PREFIX = "extraFields.";
 
@@ -228,7 +230,7 @@ public class MongoSink extends AbstractSink implements Configurable {
 		}
 	}
 
-	private Status parseEvents() throws EventDeliveryException {
+	synchronized  private Status parseEvents() throws EventDeliveryException {
 		Status status = Status.READY;
 		Channel channel = getChannel();
 		Transaction tx = null;
@@ -237,7 +239,7 @@ public class MongoSink extends AbstractSink implements Configurable {
 		try {
 			tx = channel.getTransaction();
 			tx.begin();
-
+			logger.debug("==============================begin tx=====================");
 			for (int i = 0; i < batchSize; i++) {
 				Event event = channel.take();
 				if (event == null) {
@@ -277,6 +279,7 @@ public class MongoSink extends AbstractSink implements Configurable {
 			}
 			throw new EventDeliveryException(e);
 		} finally {
+			logger.debug("==============================end finlly=====================");
 			if (tx != null) {
 				tx.close();
 			}
@@ -380,44 +383,62 @@ public class MongoSink extends AbstractSink implements Configurable {
 		addEventToList(documents, event);
 	}
 
-	private void putBulogEvent(Map<String, List<DBObject>> upserts, Map<String, List<DBObject>> inserts, Event evt) {
+	private void putBulogEvent(Map<String, List<DBObject>> upserts, Map<String, List<DBObject>> inserts, Event event) {
 		DBObject eventJson;
+		DBObject eventEvt;
+		DBObject eventActor;
 		byte[] body = event.getBody();
 		try {
 			eventJson = (DBObject) JSON.parse(new String(body));
+			eventEvt =  (DBObject)eventJson.get("event");
+			eventActor = (DBObject)eventEvt.get("actor");
+
 		} catch (Exception e) {
 			logger.error("Can't parse events: " + new String(body), e);
 			return;
 		}
-		String eventDb = "bulog_" + eventJson.get("event").get("src").replaceAll(".","_");
-		String collectionName = eventJson.get("event").get("name");
-		if(eventJson.get("flag").indexOf("|DUMP")!=-1){
-			eventDb = "bulog_dump";
-			collectionName = eventJson.get("event").get("src").replaceAll(".","_");
-			//type,actor
-			eventJson.put(PK, eventJson.get("event").get("type").toString() + ":" +
-				eventJson.get("event").get("actor").get("type").toString() + ":" +
-				eventJson.get("event").get("actor").get("id").toString());
-		}
-		else if(eventJson.get("flag").indexOf("|RT") != -1){
-			eventDb = "bulog_rt_" + eventJson.get("event").get("src").replaceAll(".","_");
-		}
-		String eventCollection = dbName + NAMESPACE_SEPARATOR + collectionName;
-		if(!eventJson.containsField(PK)){
-			List<DBObject> documents = inserts.get(eventCollection);
-			if(documents == null){
-				documents = new ArrayList<DBObject>(batchSize);
-				inserts.put(eventCollection, documents);
-			}
-			documents.add(eventJson);
-		}
-		else {
+		if(eventJson.get("flag").toString().indexOf("|RT") != -1) { //rt
+			String eventDb = "bulog_rt_" + eventEvt.get("src").toString().replaceAll("\\.","_");
+			String collectionName = eventEvt.get("name").toString();
+			String eventCollection = eventDb + NAMESPACE_SEPARATOR + collectionName;
+			eventJson.put(PK, eventEvt.get("id").toString());
 			List<DBObject> documents = upserts.get(eventCollection);
 			if(documents == null){
 				documents = new ArrayList<DBObject>(batchSize);
 				upserts.put(eventCollection, documents);
 			}
 			documents.add(eventJson);
+		}
+		else {
+			if(eventJson.get("flag").toString().indexOf("|DIFF")!=-1){
+				String eventDb = "bulog_" + eventEvt.get("src").toString().replaceAll("\\.","_");
+				String collectionName = eventEvt.get("name").toString();
+				//type,actor
+				String eventCollection = eventDb + NAMESPACE_SEPARATOR + collectionName;
+				List<DBObject> documents = inserts.get(eventCollection);
+				if(documents == null){
+					documents = new ArrayList<DBObject>(batchSize);
+					inserts.put(eventCollection, documents);
+				}
+				documents.add(eventJson);
+			}
+
+			if(eventJson.get("flag").toString().indexOf("|DUMP")!=-1 ){
+                String eventDb = "bulog_dump";
+                String collectionName = eventEvt.get("src").toString().replaceAll("\\.","_");
+				//type,actor
+				eventJson.put(PK, (eventEvt.get("type")).toString() + ":" +
+						eventActor.get("type").toString() + ":" +
+						eventActor.get("id").toString());
+
+				String eventCollection = eventDb + NAMESPACE_SEPARATOR + collectionName;
+				List<DBObject> documents = upserts.get(eventCollection);
+				if(documents == null){
+					documents = new ArrayList<DBObject>(batchSize);
+					upserts.put(eventCollection, documents);
+				}
+				documents.add(eventJson);
+			}
 		}
 	}
 
