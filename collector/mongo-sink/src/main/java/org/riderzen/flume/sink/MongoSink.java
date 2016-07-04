@@ -73,7 +73,8 @@ public class MongoSink extends AbstractSink implements Configurable {
 	public static final String TIMESTAMP_FIELD = "timestampField";
 	public static final String OPERATION = "op";
 	public static final String PK = "_id";
-	public static final String OP_INC = "$inc";
+    public static final String BULOG_PK = "bulog_id";
+    public static final String OP_INC = "$inc";
 	public static final String OP_SET = "$set";
 	public static final String OP_SET_ON_INSERT = "$setOnInsert";
 
@@ -197,8 +198,10 @@ public class MongoSink extends AbstractSink implements Configurable {
 				}
 			}
 			try {
-				CommandResult result = db.getCollection(collectionName)
-					.insert(docs, WriteConcern.SAFE).getLastError();
+                db.getCollection(collectionName)
+                        .insert(docs, WriteConcern.SAFE);
+                /*
+				CommandResult result = .getLastError();
 				if (result.ok()) {
 					String errorMessage = result.getErrorMessage();
 					if (errorMessage != null) {
@@ -210,27 +213,28 @@ public class MongoSink extends AbstractSink implements Configurable {
 				} else {
 					logger.error("can't get last error");
 				}
+				*/
 			} catch (Exception e) {
-				if (!(e instanceof com.mongodb.MongoException.DuplicateKey)) {
+                logger.error("can't process event batch for insert ...", e);
+                /*
+                if (!(e instanceof com.mongodb.MongoException.DuplicateKey)) {
 					logger.error("can't process event batch ", e);
 					logger.debug("can't process doc:{}", docs);
 				}
-				for (DBObject doc : docs) {
+                for (DBObject doc : docs) {
 					try {
 						db.getCollection(collectionName).insert(doc,
 								WriteConcern.SAFE);
 					} catch (Exception ee) {
-						if (!(e instanceof com.mongodb.MongoException.DuplicateKey)) {
-							logger.error(doc.toString());
-							logger.error("can't process events, drop it!", ee);
-						}
-					}
-				}
+                        logger.error(doc.toString());
+                        logger.error("can't process events, drop it!", ee);
+                    }
+				}*/
 			}
 		}
 	}
 
-	synchronized  private Status parseEvents() throws EventDeliveryException {
+	private Status parseEvents() throws EventDeliveryException {
 		Status status = Status.READY;
 		Channel channel = getChannel();
 		Transaction tx = null;
@@ -264,24 +268,24 @@ public class MongoSink extends AbstractSink implements Configurable {
 					}
 				}
 			}
-			if (!eventMap.isEmpty()) {
+            if (!eventMap.isEmpty()) {
 				saveEvents(eventMap);
 			}
 			if (!upsertMap.isEmpty()) {
 				doUpsert(upsertMap);
 			}
-			logger.debug("commit tx");
-			tx.commit();
-		} catch (Exception e) {
-			logger.error("can't process events, drop it!", e);
-			if (tx != null) {
-				tx.commit();// commit to drop bad event, otherwise it will enter dead loop.
-			}
+            logger.debug("commit tx ======================== end normal========================");
+            tx.commit();
+            tx.close();
+            tx = null;
+        } catch (Exception e) {
+            logger.error("can't process events, drop it!", e);
 			throw new EventDeliveryException(e);
 		} finally {
-			logger.debug("==============================end finlly=====================");
 			if (tx != null) {
-				tx.close();
+                logger.debug("==============================end finlly=====================");
+                tx.commit();// commit to drop bad event, otherwise it will enter dead loop.
+                tx.close();
 			}
 		}
 		return status;
@@ -318,7 +322,7 @@ public class MongoSink extends AbstractSink implements Configurable {
 				}
 
 				DBObject query = BasicDBObjectBuilder.start()
-					.add(PK, doc.get(PK)).get();
+					.add(PK, doc.get(BULOG_PK)).get();
 				BasicDBObjectBuilder doc_builder = BasicDBObjectBuilder.start();
 				if (doc.keySet().contains(OP_INC)) {
 					doc_builder.add(OP_INC, doc.get(OP_INC));
@@ -329,11 +333,14 @@ public class MongoSink extends AbstractSink implements Configurable {
 				if (doc.keySet().contains(OP_SET_ON_INSERT)) {
 					doc_builder.add(OP_SET_ON_INSERT, doc.get(OP_SET_ON_INSERT));
 				}
-				doc = doc_builder.get();
+                /*doc = doc_builder.get();*/
 				logger.debug("query: {}", query);
 				logger.debug("new doc: {}", doc);
-				CommandResult result = collection.update(query, doc, true,
-						false, WriteConcern.SAFE).getLastError();
+
+                collection.update(query, doc, true,
+						false, WriteConcern.SAFE);
+                /*
+                //.getLastError();
 				if (result.ok()) {
 					String errorMessage = result.getErrorMessage();
 					if (errorMessage != null) {
@@ -345,6 +352,7 @@ public class MongoSink extends AbstractSink implements Configurable {
 				} else {
 					logger.error("can't get last error");
 				}
+				*/
 			}
 		}
 	}
@@ -401,7 +409,7 @@ public class MongoSink extends AbstractSink implements Configurable {
 			String eventDb = "bulog_rt_" + eventEvt.get("src").toString().replaceAll("\\.","_");
 			String collectionName = eventEvt.get("name").toString();
 			String eventCollection = eventDb + NAMESPACE_SEPARATOR + collectionName;
-			eventJson.put(PK, eventEvt.get("id").toString());
+			eventJson.put(BULOG_PK, eventEvt.get("id").toString());
 			List<DBObject> documents = upserts.get(eventCollection);
 			if(documents == null){
 				documents = new ArrayList<DBObject>(batchSize);
@@ -411,7 +419,7 @@ public class MongoSink extends AbstractSink implements Configurable {
 		}
 		else {
 			if(eventJson.get("flag").toString().indexOf("|DIFF")!=-1){
-				String eventDb = "bulog_" + eventEvt.get("src").toString().replaceAll("\\.","_");
+				String eventDb = "bulog_ev_" + eventEvt.get("src").toString().replaceAll("\\.","_");
 				String collectionName = eventEvt.get("name").toString();
 				//type,actor
 				String eventCollection = eventDb + NAMESPACE_SEPARATOR + collectionName;
@@ -427,7 +435,7 @@ public class MongoSink extends AbstractSink implements Configurable {
                 String eventDb = "bulog_dump";
                 String collectionName = eventEvt.get("src").toString().replaceAll("\\.","_");
 				//type,actor
-				eventJson.put(PK, (eventEvt.get("type")).toString() + ":" +
+				eventJson.put(BULOG_PK, (eventEvt.get("type")).toString() + ":" +
 						eventActor.get("type").toString() + ":" +
 						eventActor.get("id").toString());
 
